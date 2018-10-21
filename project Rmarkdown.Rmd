@@ -1,0 +1,131 @@
+---
+title: "Practical Machine Learning Project"
+author: "Paul Davis"
+date: "October 20, 2018"
+output: html_document
+---
+
+
+##Background
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har.
+
+##Purpose
+The Purpose of this project is to predict the manner in which the 6 participants did the exercise. This is the "classe" variable in the training set. We have built different models based and used best model to do the prediction.
+
+#Getting and Loading Data
+
+```{r, echo=TRUE}
+library(caret)
+library(rattle)
+library(randomForest)
+library(rpart)
+library(gbm)
+TrainData <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"),header=TRUE)
+TestData <- read.csv(url("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"),header=TRUE)
+dim(TrainData)
+dim(TestData)
+```
+
+#Cleaning Data
+
+Checking out the training data set.
+```{r, echo=TRUE}
+str(TrainData)
+```
+
+Training data set consists of 19622 observations of 160 variables. Many columns corresponding to this 160 variables have NA or blank values for most of the observations. As these empty colums are not useful for the model construction we are removing it from thr training data set. We are also removing first seven columns of personnel and time informations for the same reasons.
+
+```{r, echo=TRUE}
+unwantedcolumns<-which(colSums(is.na(TrainData) |TrainData=="")>0.9*dim(TrainData)[1]) 
+TrainDataClean <- TrainData[,-unwantedcolumns]
+TrainDataClean <- TrainDataClean[,-c(1:7)]
+dim(TrainDataClean)
+```
+
+Checking out the test data set.
+```{r, echo=TRUE}
+str(TestData)
+```
+
+Performing the same cleaning operations for test data set.
+
+```{r, echo=TRUE}
+unwantedcolumns<-which(colSums(is.na(TestData) |TestData=="")>0.9*dim(TestData)[1]) 
+TestDataClean <- TestData[,-unwantedcolumns]
+dim(TestDataClean)
+```
+
+##Data Splitting
+
+Splitting the cleaned training set 'trainData' into a training set (70%) for prediction and a validation set (30%) to compute the accuracy.
+
+```{r, echo=TRUE}
+set.seed(5555)
+inTrain <- createDataPartition(TrainDataClean$classe, p=0.70, list=FALSE)
+train <- TrainDataClean[inTrain,]
+valid <- TrainDataClean[-inTrain,]
+dim(train)
+dim(valid)
+```
+
+##Prediction Algorithms
+
+We are going to use three different prediction algorithms and see which one gives the best results,
+In order to limit the effects of overfitting, and improve the efficicency of the models, we will use the *cross-validation technique with 5 folds.
+
+#Prediction with 'classification tree'
+
+```{r, echo=TRUE}
+trControl <- trainControl(method="cv", number=5)
+model_CT <- train(classe~., data=train, method="rpart", trControl=trControl)
+fancyRpartPlot(model_CT$finalModel)
+trainpred <- predict(model_CT,newdata=valid)
+confMatCT <- confusionMatrix(valid$classe,trainpred)
+confMatCT$table
+confMatCT$overall[1]
+```
+
+Accuracy of this model is very low (about 47.5%). Lets make the prediction using other models.
+
+#Prediction with 'random forests'
+
+```{r, echo=TRUE}
+model_RF <- train(classe~., data=train, method="rf", trControl=trControl, verbose=FALSE)
+print(model_RF)
+plot(model_RF,main="Accuracy of Random forest model by number of predictors")
+
+trainpred <- predict(model_RF,newdata=valid)
+confMatRF <- confusionMatrix(valid$classe,trainpred)
+confMatRF$table
+confMatRF$overall[1]
+```
+
+With random forest, we reach an accuracy of 99.3% using cross-validation with 5 steps. This is very good. Note that there is no significal increase of the accuracy with 2 predictors and 27.
+
+Let's try the last model.
+
+#Prediction with 'gradient boosting method'
+
+```{r, echo=TRUE}
+model_GBM <- train(classe~., data=train, method="gbm", trControl=trControl, verbose=FALSE)
+print(model_GBM)
+plot(model_GBM)
+trainpred <- predict(model_GBM,newdata=valid)
+confMatGBM <- confusionMatrix(valid$classe,trainpred)
+confMatGBM$table
+confMatGBM$overall[1]
+```
+
+Accuracy of this model is 96.3%.
+
+##Conclusion
+
+From the above analysis it is clear that random forest method is the best one. Let's predict the values of classe for the test data set.
+
+```{r, echo=TRUE}
+FinalTestPred <- predict(model_RF,newdata=TestDataClean)
+FinalTestPred
+```
+
+
+
